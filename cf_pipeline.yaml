@@ -1,0 +1,438 @@
+Description: CodePipeline with associated policies and sns notification.
+
+Parameters:
+  TeamName:
+    Type: String
+    Default: cloudops
+  ApplicationName:
+    Type: String
+    Default: dbrestore
+  CodePipelineArtifactStoreBucketName: 
+    Type: String
+    Default: cloudops-dbrestore-artifact-store-bucket-test2
+  DBCodeDeployRoleName:
+    Type: String
+    Default: cloudops-codedeploy-role
+  DBCFTRoleName: 
+    Type: String
+    Default: cloudops-cft-role
+  DBCodePipelineRoleName: 
+    Type: String
+    Default: cloudops-codepipeline-role
+  GitHubOwner:
+    Type: String
+    Default: jayasriruben
+  RepoBranchName: 
+    Type: String
+    Default: main
+  RepoName:
+    Type: String
+    Default: dynamodb-pipeline
+  GitHubOAuthToken: 
+    Type: String
+    Default: token
+  
+ 
+Resources:
+
+  DBCodeDeployRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: !Ref DBCodeDeployRoleName
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement: 
+        - Effect: "Allow"
+          Principal: 
+            AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
+          Action: "sts:AssumeRole"
+        - Effect: "Allow"
+          Principal: 
+            Service: "codebuild.amazonaws.com"
+          Action: "sts:AssumeRole"
+      Policies:
+        - PolicyName: 'CodedeployPolicy'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cloudformation:*
+                  - s3:*
+                  - kms:*
+                  - lambda:*
+                  - codebuild:*
+                  - iam:*
+                  - states:*
+                Resource: "*" 
+
+  DBCFTRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: !Ref DBCFTRoleName
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ['cloudformation.amazonaws.com']
+            Action: ['sts:AssumeRole']
+      Policies:
+        - PolicyName: 'CodePipelinePolicy'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cloudformation:*
+                  - s3:*
+                  - kms:*
+                  - lambda:*
+                  - codebuild:*
+                  - iam:*
+                  - acm:*
+                  - iam:* 
+                  - route53:* 
+                  - servicecatalog:* 
+                  - acm-pca:*
+                  - apigateway:*
+                  - application-autoscaling:*
+                  - applicationinsights:*
+                  - athena:*
+                  - autoscaling:*
+                  - autoscaling-plans:*
+                  - budgets:*
+                  - ce:*
+                  - cloudformation:*
+                  - cloudfront:*
+                  - cloudwatch:*
+                  - codebuild:*
+                  - codecommit:*
+                  - codestar:*
+                  - config:*
+                  - controltower:*
+                  - dax:*
+                  - directconnect:*
+                  - dynamodb:*
+                  - ec2-instance-connect:*
+                  - ec2:*
+                  - ecr:*
+                  - ecs:*
+                  - eks:*
+                  - elasticbeanstalk:*
+                  - elasticache:*
+                  - elasticloadbalancing:*
+                  - elasticmapreduce:*
+                  - dms:*
+                  - es:*
+                  - events:*
+                  - firehose:*
+                  - glacier:*
+                  - glue:*
+                  - health:*
+                  - kafka:*
+                  - kinesis:*
+                  - kms:*
+                  - lambda:*
+                  - lex:*
+                  - logs:*
+                  - mgh:*
+                  - opsworks:*
+                  - pipes:*
+                  - ram:*
+                  - redshift:*
+                  - rds:*
+                  - scheduler:*
+                  - secretsmanager:*
+                  - sms:*
+                  - sns:*
+                  - sqs:*
+                  - ssm:*
+                  - states:*
+                  - storagegateway:*
+                  - swf:*
+                  - transfer:*
+                  - waf-regional:*
+                  - waf:*
+                Resource: "*" 
+  
+  DBCodePipelineRole:
+    Type: 'AWS::IAM::Role'
+    DependsOn: 
+      - DBCFTRole
+      - DBCodeDeployRole
+    Properties:
+      RoleName: !Ref DBCodePipelineRoleName
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement: 
+        - Effect: "Allow"
+          Principal: 
+            Service: "codepipeline.amazonaws.com"
+          Action: "sts:AssumeRole"
+      Policies:
+        - PolicyName: 'CodePipelinePolicy'
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - 
+                Action: 
+                  - "s3:GetObject"
+                  - "s3:PutObject"
+                  - "s3:ListBucket"
+                Resource: 
+                  - "arn:aws:s3:::${CodePipelineArtifactStoreBucketName}"
+                  - "arn:aws:s3:::${CodePipelineArtifactStoreBucketName}/*"
+                Effect: "Allow"
+              - 
+                Condition: 
+                  ForAllValues:StringLike: 
+                    kms:ResourceAliases: 
+                    - "alias/${TeamName}/*"
+                Action: 
+                  - "kms:Decrypt"
+                  - "kms:DescribeKey"
+                  - "kms:GenerateDataKey*"
+                Resource: "*"
+                Effect: "Allow"
+              - 
+                Action: 
+                  - "iam:PassRole"
+                  - "sts:AssumeRole"
+                Resource: 
+                  - !Sub arn:aws:iam::${AWS::AccountId}:role/${DBCFTRoleName}
+                  - !Sub arn:aws:iam::${AWS::AccountId}:role/${DBCodeDeployRoleName}
+                Effect: "Allow"
+
+  KmsCmkKey:
+    Type: AWS::KMS::Key
+    Properties:
+      Description: An symmetric KMS key
+      EnableKeyRotation: false
+      KeyPolicy:
+        Version: 2012-10-17
+        Id: Allow management of the key
+        Statement:
+          - Sid: Enable IAM User Permissions
+            Effect: Allow
+            Principal:
+              AWS: !Sub arn:aws:iam::${AWS::AccountId}:root
+            Action:
+              - "kms:Create*"
+              - "kms:Describe*"
+              - "kms:Enable*"
+              - "kms:List*"
+              - "kms:Put*"
+              - "kms:Update*"
+              - "kms:Revoke*"
+              - "kms:Disable*"
+              - "kms:Get*"
+              - "kms:Delete*"
+              - "kms:ScheduleKeyDeletion"
+              - "kms:CancelKeyDeletion"
+              - "Kms:GenerateDataKey"
+              - "Kms:TagResource"
+              - "Kms:UntagResource"
+            Resource: "*"
+          - Sid: Allow use og the key
+            Effect: Allow
+            Principal: "*"
+            Action:
+              - kms:DescribeKey
+              - kms:Encrypt
+              - kms:Decrypt
+              - kms:ReEncrypt*
+              - kms:GenerateDataKey*
+            Resource: "*"
+
+          - Sid: Allow attachment of persistent resources
+            Effect: Allow
+            Principal: "*"
+            Action:
+              - kms:CreateGrant
+              - kms:ListGrants
+              - kms:RevokeGrant
+            Resource: "*"
+
+  KeyCmkAlias:
+    Type: "AWS::KMS::Alias"
+    Properties:
+      AliasName: !Sub alias/${TeamName}/${ApplicationName}/cicd
+      TargetKeyId: !Ref KmsCmkKey
+
+  CodePipelineArtifactStoreBucket:
+    Type: AWS::S3::Bucket
+    DependsOn: 
+      - KmsCmkKey
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              KMSMasterKeyID: !Ref KmsCmkKey
+              SSEAlgorithm: aws:kms
+      VersioningConfiguration:
+        Status: Enabled
+      BucketName: !Ref CodePipelineArtifactStoreBucketName
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: True
+        BlockPublicPolicy: True
+        IgnorePublicAcls: True
+        RestrictPublicBuckets: True
+
+  CodePipelineArtifactStoreBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref CodePipelineArtifactStoreBucket
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Sid: AllowAccessToRoles
+            Effect: Allow
+            Principal: 
+              AWS: !Sub arn:aws:iam::${AWS::AccountId}:role/${DBCodePipelineRoleName}
+            Action:
+              - s3:GetObject
+              - s3:PutObject
+              - s3:ListBucket
+            Resource:
+              - !Sub ${CodePipelineArtifactStoreBucket.Arn}
+              - !Sub ${CodePipelineArtifactStoreBucket.Arn}/*
+          - Sid: DenyUnEncryptedObjectUploads
+            Effect: Deny
+            Principal: "*"
+            Action: "s3:PutObject"
+            Resource: !Sub ${CodePipelineArtifactStoreBucket.Arn}/*
+            Condition:
+              StringNotEquals:
+                "s3:x-amz-server-side-encryption": "aws:kms"
+          - Sid: DenyInsecureConnections
+            Effect: Deny
+            Principal: "*"
+            Action: s3:*
+            Resource: !Sub ${CodePipelineArtifactStoreBucket.Arn}/*
+            Condition:
+              Bool:
+                "aws:SecureTransport": false
+
+  DeployPipeline:
+    Type: "AWS::CodePipeline::Pipeline"
+    DependsOn: 
+      - DBCodePipelineRole
+    Properties:
+      Name: !Sub ${TeamName}-${ApplicationName}-pipeline
+      RoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/${DBCodePipelineRoleName}
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: Source-From-Github
+              ActionTypeId:
+                Category: Source
+                Owner: ThirdParty
+                Version: 1
+                Provider: GitHub
+              OutputArtifacts:
+                - Name: Source-Artifacts
+              Configuration:
+                Owner: !Ref GitHubOwner
+                Repo: !Ref RepoName
+                Branch: !Ref RepoBranchName
+                OAuthToken: !Ref GitHubOAuthToken
+                PollForSourceChanges: true
+              RunOrder: 1
+
+        # - Name: Approve_ENV
+        #   Actions:
+        #     - Name: Approve_ENV
+        #       InputArtifacts: []
+        #       OutputArtifacts: []
+        #       ActionTypeId:
+        #         Category: Approval
+        #         Owner: AWS
+        #         Version: 1
+        #         Provider: Manual
+        #       Configuration:
+        #         CustomData: !Sub "Please approve deployment of ${ApplicationName}"
+        #       RunOrder: 1
+
+        - Name: Deploy_SDLC
+          Actions:
+            - Name: Deploy-Lambda
+              InputArtifacts:
+                - Name: Source-Artifacts
+              OutputArtifacts: []
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Version: 1
+                Provider: CloudFormation
+              Configuration:
+                ActionMode: CREATE_UPDATE
+                Capabilities: "CAPABILITY_IAM,CAPABILITY_NAMED_IAM,CAPABILITY_AUTO_EXPAND"
+                RoleArn:  !Sub arn:aws:iam::${AWS::AccountId}:role/${DBCFTRoleName}
+                StackName: !Sub ${TeamName}-lambda
+                TemplatePath: "Source-Artifacts::iac/cft/lambda.yaml"
+                TemplateConfiguration: !Sub "Source-Artifacts::iac/environment/lambda.json"
+              RoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/${DBCodeDeployRoleName}
+              RunOrder: 1
+
+            - Name: Deploy-StepFunction
+              InputArtifacts:
+                - Name: Source-Artifacts
+              OutputArtifacts: []
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Version: 1
+                Provider: CloudFormation
+              Configuration:
+                ActionMode: CREATE_UPDATE
+                Capabilities: "CAPABILITY_IAM,CAPABILITY_NAMED_IAM,CAPABILITY_AUTO_EXPAND"
+                RoleArn:  !Sub arn:aws:iam::${AWS::AccountId}:role/${DBCFTRoleName}
+                StackName: !Sub ${TeamName}-stepfunction
+                TemplatePath: "Source-Artifacts::iac/cft/stepfunction.yaml"
+                TemplateConfiguration: !Sub "Source-Artifacts::iac/environment/stepfunction.json"
+              RoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/${DBCodeDeployRoleName}
+              RunOrder: 2
+
+            # - Name: Deploy-Custom-Resource
+            #   InputArtifacts:
+            #       - Name: Source-Artifacts
+            #   OutputArtifacts: []
+            #   ActionTypeId:
+            #     Category: Deploy
+            #     Owner: AWS
+            #     Version: 1
+            #     Provider: CloudFormation
+            #   Configuration:
+            #     ActionMode: CREATE_UPDATE
+            #     Capabilities: "CAPABILITY_IAM,CAPABILITY_NAMED_IAM,CAPABILITY_AUTO_EXPAND"
+            #     RoleArn:  !Sub arn:aws:iam::${AWS::AccountId}:role/${DBCFTRoleName}
+            #     StackName: !Sub ${TeamName}custom-resource-lambda
+            #     TemplatePath: "Source-Artifacts::iac/cft/custom_resource_lambda.yaml"
+            #     TemplateConfiguration: !Sub "Source-Artifacts::iac/environment/custom_resource_lambda.json"
+            #   RoleArn: !Sub arn:aws:iam::${AWS::AccountId}:role/${DBCodeDeployRoleName}
+            #   RunOrder: 3
+              
+      ArtifactStore:
+        Type: S3
+        Location: !Ref CodePipelineArtifactStoreBucket
+        EncryptionKey:
+          Id: !Ref KmsCmkKey
+          Type: KMS
+
+Outputs:
+  PipelineArn:
+    Description: ARN of the pipeline created.
+    Value: !Sub arn:aws:codepipeline:${AWS::Region}:${AWS::AccountId}:${DeployPipeline}
+  KmsArn:
+    Value: !GetAtt KmsCmkKey.Arn
+  KmsAlies:
+    Value: !Ref KeyCmkAlias
+  Bucket:
+    Description: Name of bucket created
+    Value: !Ref CodePipelineArtifactStoreBucket
+
+
+
+
+

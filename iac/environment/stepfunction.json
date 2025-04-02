@@ -1,0 +1,15 @@
+{
+    "Parameters": {
+      "DynamoDBBucketName": "dynamodbexport25",
+      "StateMachineName" : "ops-dynamodb-backup-restoration",
+      "StepFunctionRoleName": "ops-step-function-role",
+      "FindLatestBackupFunctionName": "ops-find-latest-backup",
+      "RestoreBackupFunctionName": "ops-restore-backup",
+      "CheckRestoreStatusFunctionName": "ops-check-restore-status",
+      "ExportToS3FunctionName": "ops-export-to-s3",
+      "DeleteDynamoDBDataFunctionName": "ops-delete-dynamodb-data",
+      "ImportS3ToDynamoDBFunctionName": "ops-imports3-to-dynamodb",
+      "DeleteDynamoDBTableFunctionName": "ops-delete-dynamodb-table"
+    }
+  }
+   

@@ -1,0 +1,20 @@
+{
+    "Parameters": {
+      "LambdaExecutionRoleName": "ops-lambda-execution-role",
+      "DynamoDBBucketName": "dynamodbexport25",
+      "FindLatestBackupFunctionName": "ops-find-latest-backup",
+      "RestoreBackupFunctionName": "ops-restore-backup",
+      "CheckRestoreStatusFunctionName": "ops-check-restore-status",
+      "ExportToS3FunctionName": "ops-export-to-s3",
+      "DeleteDynamoDBDataFunctionName": "ops-delete-dynamodb-data",
+      "ImportS3ToDynamoDBFunctionName": "ops-imports3-to-dynamodb",
+      "DeleteDynamoDBTableFunctionName": "ops-delete-dynamodb-table",
+      "GlueJobExecutionRoleName": "ops-gluejob-execution-role",
+      "GlueExportpythonver": "3",
+      "GlueExportnumberofworkers":"2",
+      "GlueExportmaxconcuruns":"1",
+      "GlueExportworkertype":"G.1X",
+      "GlueExportTimeout":"60",
+      "GlueExportversion":"3.0"
+    }
+  }
