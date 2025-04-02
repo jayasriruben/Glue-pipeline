@@ -36,12 +36,12 @@ Parameters:
     Description: "The name of the Lambda function responsible for checking the restore status of a DynamoDB table. For example: ops-check-restore-status" 
     Default: "ops-check-restore-status"
 
-  DeleteDynamoDBDataFunctionName:
+  DeleteDynamoDBDataGlueName:
     Type: String
     Description: "The name of the Lambda function responsible for deleting all items from a DynamoDB table. For example: ops-delete-dynamodb-data"
     Default: "ops-delete-dynamodb-data"
 
-  DeleteDynamoDBTableGlueName:
+  DeleteDynamoDBTableFunctionName:
     Type: String
     Description: "The name of the Lambda function responsible for permanently deleting the DynamoDB table (after all items are deleted). For example: ops-delete-dynamodb-table"
     Default: "ops-delete-dynamodb-table"
@@ -354,7 +354,7 @@ Resources:
     Type: "AWS::Glue::Job"
     Properties:                             
       Role: !GetAtt GlueExecutionRole.Arn
-      Name: !Ref DeleteDynamoDBDataFunctionName
+      Name: !Ref DeleteDynamoDBDataGlueName
       GlueVersion: !Ref GlueExportversion
       WorkerType: !Ref GlueExportworkertype
       Timeout: !Ref GlueExportTimeout

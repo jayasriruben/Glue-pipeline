@@ -26,7 +26,7 @@ Parameters:
     Description: "The name of the Lambda function to export data to S3. For example: ops-export-to-s3"
     Default: "ops-export-to-s3"
 
-  DeleteDynamoDBTableGlueName:
+  DeleteDynamoDBDataGlueName:
     Type: String
     Description: "The name of the Lambda function to delete the DynamoDB table. For example: ops-delete-dynamodb-data"
     Default: "ops-delete-dynamodb-data"
@@ -87,9 +87,9 @@ Resources:
                   - "glue:StartJobRun"
                   - "glue:GetJobRun"
                 Resource:
-                  - !Sub arn:aws:glue:${AWS::Region}:${AWS::AccountId}:job/${ExportToS3GlueJobName}
-                  - !Sub arn:aws:glue:${AWS::Region}:${AWS::AccountId}:job/${DeleteDynamoDBDataGlueJobName}
-                  - !Sub arn:aws:glue:${AWS::Region}:${AWS::AccountId}:job/${ImportS3ToDynamoDBGlueJobName}
+                  - !Sub arn:aws:glue:${AWS::Region}:${AWS::AccountId}:job/${ExportToS3GlueName}
+                  - !Sub arn:aws:glue:${AWS::Region}:${AWS::AccountId}:job/${DeleteDynamoDBDataGlueName}
+                  - !Sub arn:aws:glue:${AWS::Region}:${AWS::AccountId}:job/${ImportS3ToDynamoDBGlueName}
 
                   
   # Step Function State Machine
@@ -162,7 +162,7 @@ Resources:
                     "Type": "Task",
                     "Resource": "arn:aws:states:::glue:startJobRun",
                     "Parameters": {
-                      "JobName": ${ExportToS3GlueJobName},
+                      "JobName": ${ExportDynamoDBToS3GlueName},
                       "Arguments": {
                         "--TABLE_NAME.$": "$.restore.restore_table_name",
                         "--S3_BUCKET": "${DynamoDBBucketName}",
@@ -181,7 +181,7 @@ Resources:
                     "Type": "Task",
                     "Resource": "arn:aws:states:::aws-sdk:glue:getJobRun",
                     "Parameters": {
-                      "JobName": "&{ExportToS3GlueJobName}",
+                      "JobName": "&{ExportDynamoDBToS3GlueName}",
                       "RunId.$": "$.export.JobRunId"
                     },
                     "ResultPath": "$.jobStatus",
@@ -207,7 +207,7 @@ Resources:
                     "Type": "Task",
                     "Resource": "arn:aws:states:::glue:startJobRun",
                     "Parameters": {
-                      "JobName": "${DeleteDynamoDBDataGlueJobName}",
+                      "JobName": "${DeleteDynamoDBDataGlueName}",
                       "Arguments": {
                         "--TABLE_NAME.$": "$.TABLE_NAME"
                       }
@@ -255,7 +255,7 @@ Resources:
                     "Type": "Task",
                     "Resource": "arn:aws:states:::glue:startJobRun",
                     "Parameters": {
-                      "JobName": "${ImportS3ToDynamoDBGlueJobName}",
+                      "JobName": "${ImportS3ToDynamoDBGlueName}",
                       "Arguments": {
                         "--TABLE_NAME.$": "$.TABLE_NAME",
                         "--S3_BUCKET": "${DynamoDBBucketName}",
