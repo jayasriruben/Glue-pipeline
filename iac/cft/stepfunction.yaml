@@ -87,7 +87,7 @@ Resources:
                   - "glue:StartJobRun"
                   - "glue:GetJobRun"
                 Resource:
-                  - !Sub arn:aws:glue:${AWS::Region}:${AWS::AccountId}:job/${ExportToS3GlueName}
+                  - !Sub arn:aws:glue:${AWS::Region}:${AWS::AccountId}:job/${ExportDynamoDBToS3GlueName}
                   - !Sub arn:aws:glue:${AWS::Region}:${AWS::AccountId}:job/${DeleteDynamoDBDataGlueName}
                   - !Sub arn:aws:glue:${AWS::Region}:${AWS::AccountId}:job/${ImportS3ToDynamoDBGlueName}
 
