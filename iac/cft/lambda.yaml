@@ -364,7 +364,7 @@ Resources:
       Command: {
         "Name" : "glueetl",
         "PythonVersion" : !Ref GlueExportpythonver,
-        "ScriptLocation": !Sub "s3://${DynamoDBBucketName}/python-scripts/Delete_DynamoDB_Data.py"
+        "ScriptLocation": !Sub "s3://${DynamoDBBucketName}/python-scripts/delete_dynamoDB_data.py"
       }
       MaxRetries: 0
       Description: "Delete DynamoDB Data Glue Job."
