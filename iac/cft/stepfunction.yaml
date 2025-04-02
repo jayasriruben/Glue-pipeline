@@ -48,7 +48,7 @@ Parameters:
   DynamoDBBucketName:
     Type: String
 
-StateMachineFunctionName:
+StateMachineName:
   Type: String
   Description: "The name of the state Machine"
   Default: "ops-dynamodb-backup-restoration"
@@ -96,7 +96,7 @@ Resources:
   StepFunction:
     Type: AWS::StepFunctions::StateMachine
     Properties:
-      StateMachineName: !Ref StateMachineFunctionName
+      StateMachineName: !Ref StateMachineName
       RoleArn: !GetAtt StepFunctionRole.Arn
       DefinitionString: !Sub |
         {
