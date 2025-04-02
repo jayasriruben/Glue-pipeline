@@ -390,6 +390,9 @@ Resources:
       MaxRetries: 0
       Description: "Import DynamoDB Data Glue Job."
 
+
+
+
   # Lambda function to delete DynamoDB table items
   DeleteDynamoDBTableFunction:
     Type: AWS::Lambda::Function
