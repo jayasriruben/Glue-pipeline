@@ -48,10 +48,10 @@ Parameters:
   DynamoDBBucketName:
     Type: String
 
-StateMachineName:
-  Type: String
-  Description: "The name of the state Machine"
-  Default: "ops-dynamodb-backup-restoration"
+  StateMachineName:
+    Type: String
+    Description: "The name of the state machine. For example: ops-dynamodb-backup-restoration"
+    Default: "ops-dynamodb-backup-restoration"
 
 Resources:
   # IAM Role for Step Function 
