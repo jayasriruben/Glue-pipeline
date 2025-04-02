@@ -41,7 +41,7 @@ Parameters:
     Description: "The name of the Lambda function responsible for deleting all items from a DynamoDB table. For example: ops-delete-dynamodb-data"
     Default: "ops-delete-dynamodb-data"
 
-  DeleteDynamoDBTableFunctionName:
+  DeleteDynamoDBTableGlueName:
     Type: String
     Description: "The name of the Lambda function responsible for permanently deleting the DynamoDB table (after all items are deleted). For example: ops-delete-dynamodb-table"
     Default: "ops-delete-dynamodb-table"

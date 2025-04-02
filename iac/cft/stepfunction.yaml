@@ -21,17 +21,17 @@ Parameters:
     Description: "The name of the Lambda function to check the restore status of the DynamoDB table. For example: ops-check-restore-status"
     Default: "ops-check-restore-status"
     
-  ExportToS3GlueJobName:
+  ExportDynamoDBToS3GlueName:
     Type: String
     Description: "The name of the Lambda function to export data to S3. For example: ops-export-to-s3"
     Default: "ops-export-to-s3"
 
-  DeleteDynamoDBDataGlueJobName:
+  DeleteDynamoDBTableGlueName:
     Type: String
     Description: "The name of the Lambda function to delete the DynamoDB table. For example: ops-delete-dynamodb-data"
     Default: "ops-delete-dynamodb-data"
 
-  ImportS3ToDynamoDBGlueJobName:
+  ImportS3ToDynamoDBGlueName:
     Type: String
     Description: "The name of the Lambda function to import data from S3 to DynamoDB. For example: ops-imports3-to-dynamodb "
     Default: "ops-imports3-to-dynamodb"
@@ -48,10 +48,11 @@ Parameters:
   DynamoDBBucketName:
     Type: String
 
-StateMachineName:
+StateMachineFunctionName:
   Type: String
   Description: "The name of the state Machine"
   Default: "ops-dynamodb-backup-restoration"
+
 Resources:
   # IAM Role for Step Function 
   StepFunctionRole:
@@ -95,7 +96,7 @@ Resources:
   StepFunction:
     Type: AWS::StepFunctions::StateMachine
     Properties:
-      StateMachineName: "DynamoDBBackupRestoration"
+      StateMachineName: !Ref StateMachineFunctionName
       RoleArn: !GetAtt StepFunctionRole.Arn
       DefinitionString: !Sub |
         {
