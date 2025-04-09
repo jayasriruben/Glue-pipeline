@@ -9,7 +9,7 @@ Parameters:
   DynamoDBBucketName:
     Type: String
     Description: "The name of the S3 bucket to use for exporting DynamoDB data. For example: dynamodbexportdata"
-    Default: "dynamodbexport25"
+    Default: "dynamodbexportglue123"
 
   LambdaExecutionRoleName:
     Type: String
@@ -36,11 +36,6 @@ Parameters:
     Description: "The name of the Lambda function responsible for checking the restore status of a DynamoDB table. For example: ops-check-restore-status" 
     Default: "ops-check-restore-status"
 
-  DeleteDynamoDBDataGlueName:
-    Type: String
-    Description: "The name of the Lambda function responsible for deleting all items from a DynamoDB table. For example: ops-delete-dynamodb-data"
-    Default: "ops-delete-dynamodb-data"
-
   DeleteDynamoDBTableFunctionName:
     Type: String
     Description: "The name of the Lambda function responsible for permanently deleting the DynamoDB table (after all items are deleted). For example: ops-delete-dynamodb-table"
@@ -49,12 +44,17 @@ Parameters:
   ExportDynamoDBToS3GlueName:
     Type: String
     Description: Name of the Glue job for exporting DynamoDB to S3
-    Default: "ops-export-to-s3"
+    Default: "ops-export-dynamodb-to-s3-gluejob"
+
+  DeleteDynamoDBGlueName:
+    Type: String
+    Description: Name of the Glue job for Deleting DynamoDB data
+    Default: "ops-delete-dynamodb-gluejob"
 
   ImportS3ToDynamoDBGlueName:
     Type: String
     Description: Name of the Glue job for importing S3 data DynamoDB
-    Default: "ops-imports3-to-dynamodb"
+    Default: "ops-import-s3-to-dynamodb-gluejob"
 
   GlueExportpythonver:
     Type: String
@@ -68,7 +68,7 @@ Parameters:
 
   GlueExportmaxconcuruns:
     Type: Number
-    Default: 1
+    Default: 2
     Description: Maximum concurrent runs for Glue job
 
   GlueExportworkertype:
@@ -86,7 +86,7 @@ Parameters:
     Default: "3.0"
     Description: Glue version
 
-
+   
 Resources:
   # IAM Role for Lambda Function Execution
   LambdaExecutionRole:
@@ -123,16 +123,9 @@ Resources:
                 Action:
                   - s3:PutObject
                   - s3:GetObject
-                Resource:
+                Resource: 
                   - !Sub "arn:aws:s3:::${AWS::AccountId}:${AWS::Region}:${DynamoDBBucketName}/*"
                   - !Sub "arn:aws:s3:::${AWS::AccountId}:${AWS::Region}:${DynamoDBBucketName}"
-              - Effect: Allow
-                Action:
-                  - logs:CreateLogGroup
-                  - logs:CreateLogStream
-                  - logs:PutLogEvents
-                Resource:
-                  !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*"
   
   # IAM Role for Glue Job Execution
   GlueExecutionRole:
@@ -159,7 +152,6 @@ Resources:
                 Resource:
                   - !Sub "arn:aws:s3:::${AWS::AccountId}:${AWS::Region}:${DynamoDBBucketName}/*"
                   - !Sub "arn:aws:s3:::${AWS::AccountId}:${AWS::Region}:${DynamoDBBucketName}"
-                  
               - Effect: "Allow"
                 Action:
                   - "dynamodb:Scan"
@@ -169,25 +161,13 @@ Resources:
                   - "dynamodb:PutItem"
                   - "dynamodb:DeleteItem"
                   - "dynamodb:DescribeTable"
-                Resource: "*"
+                Resource: '*'
               - Effect: "Allow"
                 Action:
-                  - "glue:GetJob"
                   - "glue:StartJobRun"
                   - "glue:GetJobRun"
-                  - "glue:GetJobRuns"
-                  - "glue:BatchStopJobRun"
-                  - "glue:GetTables"
-                  - "glue:GetTable"
-                  - "glue:GetDatabase"
-                Resource: "*"
-              - Effect: "Allow"
-                Action:
-                  - "logs:CreateLogGroup"
-                  - "logs:CreateLogStream"
-                  - "logs:PutLogEvents"
-                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws-glue/*"
-
+                Resource: '*'
+                  
   # Lambda function to find the latest backup
   FindLatestBackupFunction:
     Type: AWS::Lambda::Function
@@ -199,23 +179,23 @@ Resources:
         ZipFile: |
           import boto3
           import os
-
           dynamodb = boto3.client('dynamodb')
 
           def lambda_handler(event, context):
               try:
-                  table_name = event['TABLE_NAME']  
+                  table_name = event.get('TABLE_NAME')
 
                   # Get list of backups for the given table
                   response = dynamodb.list_backups(TableName=table_name)
 
+                  # Check if there are backups available
                   if 'BackupSummaries' not in response or not response['BackupSummaries']:
                       return {
                           "statusCode": 404,
                           "body": f"No backups found for table {table_name}"
                       }
 
-                  # Find the latest backup
+                  # Find the latest backup by sorting based on the backup creation timestamp
                   latest_backup = max(response['BackupSummaries'], key=lambda x: x['BackupCreationDateTime'])
 
                   return {
@@ -242,43 +222,43 @@ Resources:
       Role: !GetAtt LambdaExecutionRole.Arn
       Code:
         ZipFile: |
+          
           import boto3
+          import os
+          import json
           from datetime import datetime
 
           dynamodb = boto3.client('dynamodb')
 
           def lambda_handler(event, context):
               try:
-                  backup_arn = event['latest_backup_arn']
-                  original_table_name = event['TABLE_NAME']
+                  backup_arn = event.get('backup_arn')
+                  original_table_name = event.get('TABLE_NAME')
                   new_table_name = f"{original_table_name}_temp"
 
-                  # Restore the table from backup
                   response = dynamodb.restore_table_from_backup(
                       TargetTableName=new_table_name,
                       BackupArn=backup_arn
                   )
-                  
+
                   # Generate a unique filename using the current timestamp
                   timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
                   file_name = f"{new_table_name}_backup_{timestamp}.json"
 
-                  # Return the response with necessary information including the new table name and the generated file name
                   return {
                       "statusCode": 200,
                       "body": f"Backup restored successfully to {new_table_name}",
                       "restore_table_arn": response['TableDescription']['TableArn'],
                       "restore_table_name": new_table_name,
                       "file_name": file_name  
-                  }
+                      }
 
               except Exception as e:
-                  # Return an error response if something goes wrong
                   return {
                       "statusCode": 500,
                       "body": f"Error restoring backup: {str(e)}"
                   }
-          
+
       Runtime: "python3.12"
       Timeout: 900
 
@@ -292,7 +272,6 @@ Resources:
       Code:
         ZipFile: |
           import boto3
-
           dynamodb = boto3.client('dynamodb')
 
           def lambda_handler(event, context):
@@ -334,7 +313,7 @@ Resources:
     Type: "AWS::Glue::Job"
     Properties:                             
       Role: !GetAtt GlueExecutionRole.Arn
-      Name: !Ref ExportDynamoDBToS3GlueName 
+      Name: !Ref ExportDynamoDBToS3GlueName
       GlueVersion: !Ref GlueExportversion
       WorkerType: !Ref GlueExportworkertype
       Timeout: !Ref GlueExportTimeout
@@ -354,7 +333,7 @@ Resources:
     Type: "AWS::Glue::Job"
     Properties:                             
       Role: !GetAtt GlueExecutionRole.Arn
-      Name: !Ref DeleteDynamoDBDataGlueName
+      Name: !Ref DeleteDynamoDBGlueName
       GlueVersion: !Ref GlueExportversion
       WorkerType: !Ref GlueExportworkertype
       Timeout: !Ref GlueExportTimeout
@@ -364,7 +343,7 @@ Resources:
       Command: {
         "Name" : "glueetl",
         "PythonVersion" : !Ref GlueExportpythonver,
-        "ScriptLocation": !Sub "s3://${DynamoDBBucketName}/python-scripts/delete_dynamoDB_data.py"
+        "ScriptLocation": !Sub "s3://${DynamoDBBucketName}/python-scripts/Delete_DynamoDB_Data.py"
       }
       MaxRetries: 0
       Description: "Delete DynamoDB Data Glue Job."
@@ -390,9 +369,6 @@ Resources:
       MaxRetries: 0
       Description: "Import DynamoDB Data Glue Job."
 
-
-
-
   # Lambda function to delete DynamoDB table items
   DeleteDynamoDBTableFunction:
     Type: AWS::Lambda::Function
@@ -403,50 +379,30 @@ Resources:
       Code:
         ZipFile: |
           import boto3
-          import os
 
-          # Initialize DynamoDB client
           dynamodb = boto3.client('dynamodb')
 
           def lambda_handler(event, context):
               try:
-                  # Fetch the table name directly from the event input
-                  table_name = event.get('TABLE_NAME')
-
-                  if not table_name:
-                      return {
-                          "statusCode": 400,
-                          "body": "TABLE_NAME is required in the input",
-                          "delete_status": "FAILED"
-                      }
+                  # Fetch table name from event input
+                  TABLE_NAME = event['TABLE_NAME']
 
                   # Delete the DynamoDB table
-                  response = dynamodb.delete_table(TableName=table_name)
-
-                  # If the table deletion was successful
-                  if response['TableDescription']['TableName'] == table_name:
-                      return {
-                          "statusCode": 200,
-                          "body": f"Table {table_name} deleted successfully!",
-                          "delete_status": "SUCCEEDED"
-                      }
-                  else:
-                      return {
-                          "statusCode": 500,
-                          "body": f"Failed to delete table {table_name}.",
-                          "delete_status": "FAILED"
-                      }
-
+                  response = dynamodb.delete_table(TableName=TABLE_NAME)
+                  
+                  return {
+                      "statusCode": 200,
+                      "body": f"Table {TABLE_NAME} deleted successfully!"
+                  }
               except Exception as e:
-                  # Handle any exceptions and return failure status
                   return {
                       "statusCode": 500,
-                      "body": f"Error deleting table: {str(e)}",
-                      "delete_status": "FAILED"
+                      "body": f"Error deleting table: {str(e)}"
                   }
 
       Runtime: "python3.12"
       Timeout: 900
+
       
 Outputs:
   FindLatestBackupFunctionName:
@@ -468,214 +424,3 @@ Outputs:
   GlueExecutionRoleArn:
     Description: "The ARN of the Glue JOb execution role"
     Value: !GetAtt GlueExecutionRole.Arn
-
-
-    # {
-        #   "Comment": "DynamoDB Backup Restoration Process",
-        #   "StartAt": "FindLatestBackup",
-        #   "States": {
-        #     "FindLatestBackup": {
-        #       "Type": "Task",
-        #       "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${FindLatestBackupFunctionName}",
-        #       "Parameters": {
-        #         "TABLE_NAME.$": "$.DynamoDBTableName"
-        #       },
-        #       "ResultPath": "$.backup",
-        #       "Next": "RestoreBackup"
-        #     },
-        #     "RestoreBackup": {
-        #       "Type": "Task",
-        #       "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${RestoreBackupFunctionName}",
-        #       "Parameters": {
-        #         "TABLE_NAME.$": "$.DynamoDBTableName",
-        #         "latest_backup_arn.$": "$.backup.latest_backup_arn"
-        #       },
-        #       "ResultPath": "$.restore",
-        #       "Next": "CheckRestoreStatus"
-        #     },
-        #     "CheckRestoreStatus": {
-        #       "Type": "Task",
-        #       "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${CheckRestoreStatusFunctionName}",
-        #       "Parameters": {
-        #         "restored_table_name.$": "$.restore.restore_table_name"
-        #       },
-        #       "ResultPath": "$.RestoreStatus",
-        #       "Next": "IsTableActive"
-        #     },
-        #     "IsTableActive": {
-        #       "Type": "Choice",
-        #       "Choices": [
-        #         {
-        #           "Variable": "$.RestoreStatus.status",
-        #           "StringEquals": "ACTIVE",
-        #           "Next": "ExportToS3"
-        #         }
-        #       ],
-        #       "Default": "WaitBeforeRetry"
-        #     },
-        #     "WaitBeforeRetry": {
-        #       "Type": "Wait",
-        #       "Seconds": 60,
-        #       "Next": "CheckRestoreStatus"
-        #     },
-        #     "ExportToS3": {
-        #       "Type": "Task",
-        #       "Resource": "arn:aws:states:::glue:startJobRun",
-        #       "Parameters": {
-        #         "JobName": "ops-export-to-s3",
-        #         "Arguments": {
-        #           "--TABLE_NAME.$": "$.restore.restore_table_name",
-        #           "--S3_BUCKET": "${DynamoDBBucketName}",
-        #           "--FILE_NAME.$": "$.restore.file_name"
-        #         }
-        #       },
-        #       "ResultPath": "$.export",
-        #       "Next": "WaitForExportJob"
-        #     },
-        #     "WaitForExportJob": {
-        #       "Type": "Wait",
-        #       "Seconds": 30,
-        #       "Next": "CheckExportJobStatus"
-        #     },
-        #     "CheckExportJobStatus": {
-        #       "Type": "Task",
-        #       "Resource": "arn:aws:states:::aws-sdk:glue:getJobRun",
-        #       "Parameters": {
-        #         "JobName": "ops-export-to-s3",
-        #         "RunId.$": "$.export.JobRunId"
-        #       },
-        #       "ResultPath": "$.jobStatus",
-        #       "Next": "ExportJobStatusChoice"
-        #     },
-        #     "ExportJobStatusChoice": {
-        #       "Type": "Choice",
-        #       "Choices": [
-        #         {
-        #           "Variable": "$.jobStatus.JobRun.JobRunState",
-        #           "StringEquals": "SUCCEEDED",
-        #           "Next": "DeleteDynamoDBData"
-        #         },
-        #         {
-        #           "Variable": "$.jobStatus.JobRun.JobRunState",
-        #           "StringEquals": "FAILED",
-        #           "Next": "FailState"
-        #         }
-        #       ],
-        #       "Default": "WaitForExportJob"
-        #     },
-        #     "DeleteDynamoDBData": {
-        #       "Type": "Task",
-        #       "Resource": "arn:aws:states:::glue:startJobRun",
-        #       "Parameters": {
-        #         "JobName": "ops-delete-dynamodb-data",
-        #         "Arguments": {
-        #           "--TABLE_NAME.$": "$.TABLE_NAME"
-        #         }
-        #       },
-        #       "ResultPath": "$.delete",
-        #       "Next": "WaitForDeleteJobCompletion"
-        #     },
-        #     "WaitForDeleteJobCompletion": {
-        #       "Type": "Wait",
-        #       "Seconds": 30,
-        #       "Next": "GetDeleteJobStatus"
-        #     },
-        #     "GetDeleteJobStatus": {
-        #       "Type": "Task",
-        #       "Resource": "arn:aws:states:::aws-sdk:glue:getJobRun",
-        #       "Parameters": {
-        #         "JobName.$": "$.delete.JobName",
-        #         "RunId.$": "$.delete.JobRunId"
-        #       },
-        #       "ResultPath": "$.delete.Status",
-        #       "Next": "CheckDeleteJobStatus"
-        #     },
-        #     "CheckDeleteJobStatus": {
-        #       "Type": "Choice",
-        #       "Choices": [
-        #         {
-        #           "Variable": "$.delete.Status.JobRun.JobRunState",
-        #           "StringEquals": "SUCCEEDED",
-        #           "Next": "ImportS3ToDynamoDB"
-        #         },
-        #         {
-        #           "Variable": "$.delete.Status.JobRun.JobRunState",
-        #           "StringEquals": "FAILED",
-        #           "Next": "FailState"
-        #         },
-        #         {
-        #           "Variable": "$.delete.Status.JobRun.JobRunState",
-        #           "StringEquals": "STOPPED",
-        #           "Next": "FailState"
-        #         }
-        #       ],
-        #       "Default": "WaitForDeleteJobCompletion"
-        #     },
-        #     "ImportS3ToDynamoDB": {
-        #       "Type": "Task",
-        #       "Resource": "arn:aws:states:::glue:startJobRun",
-        #       "Parameters": {
-        #         "JobName": "ops-imports3-to-dynamodb",
-        #         "Arguments": {
-        #           "--TABLE_NAME.$": "$.TABLE_NAME",
-        #           "--S3_BUCKET": "${DynamoDBBucketName}",
-        #           "--S3_KEY.$": "$.restore.file_name"
-        #         }
-        #       },
-        #       "ResultPath": "$.import",
-        #       "Next": "WaitForImportJobCompletion"
-        #     },
-        #     "WaitForImportJobCompletion": {
-        #       "Type": "Wait",
-        #       "Seconds": 60,
-        #       "Next": "GetImportJobStatus"
-        #     },
-        #     "GetImportJobStatus": {
-        #       "Type": "Task",
-        #       "Resource": "arn:aws:states:::aws-sdk:glue:getJobRun",
-        #       "Parameters": {
-        #         "JobName.$": "$.import.JobName",
-        #         "RunId.$": "$.import.JobRunId"
-        #       },
-        #       "ResultPath": "$.import.Status",
-        #       "Next": "CheckImportJobStatus"
-        #     },
-        #     "CheckImportJobStatus": {
-        #       "Type": "Choice",
-        #       "Choices": [
-        #         {
-        #           "Variable": "$.import.Status.JobRun.JobRunState",
-        #           "StringEquals": "SUCCEEDED",
-        #           "Next": "DeleteDynamoDBTable"
-        #         },
-        #         {
-        #           "Variable": "$.import.Status.JobRun.JobRunState",
-        #           "StringEquals": "FAILED",
-        #           "Next": "FailState"
-        #         },
-        #         {
-        #           "Variable": "$.import.Status.JobRun.JobRunState",
-        #           "StringEquals": "STOPPED",
-        #           "Next": "FailState"
-        #         }
-        #       ],
-        #       "Default": "WaitForImportJobCompletion"
-        #     },
-        #     "DeleteDynamoDBTable": {
-        #       "Type": "Task",
-        #       "Resource": "arn:aws:lambda:us-east-1:259086700288:function:ops-delete-dynamodb-table",
-        #       "Parameters": {
-        #         "TABLE_NAME.$": "$.restore.restore_table_name"
-        #       },
-        #       "Next": "SucceedState"
-        #     },
-        #     "FailState": {
-        #       "Type": "Fail",
-        #       "Error": "ProcessFailed",
-        #       "Cause": "An error occurred during the process."
-        #     },
-        #     "SucceedState": {
-        #       "Type": "Succeed"
-        #     }
-        #   }
-        # }

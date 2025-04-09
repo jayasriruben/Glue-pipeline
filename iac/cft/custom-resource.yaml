@@ -30,6 +30,9 @@ Parameters:
     Type: String
     Description: "name of the s3 bucket"
 
+
+
+    
 Resources:
 
   # IAM Role for Lambda
@@ -54,6 +57,8 @@ Resources:
               - Effect: Allow
                 Action:
                   - states:StartExecution
+                  # - states:DescribeExecution
+                  # - states:StopExecution
                 Resource: !Ref StepFunctionArn
   
    # Lambda Function for Custom Resource
@@ -155,7 +160,6 @@ Resources:
       DynamoDBTableNames: !Ref DynamoDBTableNames
       Timestamp: !Ref Timestamp
       StepFunctionArn: !Ref StepFunctionArn
-
 
 
 

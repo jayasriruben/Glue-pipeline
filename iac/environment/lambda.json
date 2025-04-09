@@ -1,20 +1,20 @@
 {
-    "Parameters": {
-      "LambdaExecutionRoleName": "ops-lambda-execution-role",
-      "DynamoDBBucketName": "dynamodbexport25",
-      "FindLatestBackupFunctionName": "ops-find-latest-backup",
-      "RestoreBackupFunctionName": "ops-restore-backup",
-      "CheckRestoreStatusFunctionName": "ops-check-restore-status",
-      "ExportDynamoDBToS3GlueName": "ops-export-to-s3",
-      "DeleteDynamoDBDataGlueName": "ops-delete-dynamodb-data",
-      "ImportS3ToDynamoDBGlueName": "ops-imports3-to-dynamodb",
-      "DeleteDynamoDBTableFunctionName": "ops-delete-dynamodb-table",
-      "GlueJobExecutionRoleName": "ops-gluejob-execution-role",
-      "GlueExportpythonver": "3",
-      "GlueExportnumberofworkers":"2",
-      "GlueExportmaxconcuruns":"1",
-      "GlueExportworkertype":"G.1X",
-      "GlueExportTimeout":"60",
-      "GlueExportversion":"3.0"
-    }
+  "Parameters": {
+    "DynamoDBBucketName": "dynamodbexportglue123",
+    "FindLatestBackupFunctionName": "ops-db-find-latest-backup",
+    "RestoreBackupFunctionName": "ops-db-restore-backup",
+    "CheckRestoreStatusFunctionName": "ops-db-check-restore-status",
+    "ExportDynamoDBToS3GlueName": "ops-db-export-to-s3",
+    "DeleteDynamoDBGlueName": "ops-db-delete-dynamodb-data",
+    "ImportS3ToDynamoDBGlueName": "ops-db-imports3-to-dynamodb",
+    "DeleteDynamoDBTableFunctionName": "ops-db-delete-dynamodb-table",
+    "GlueJobExecutionRoleName": "ops-db-gluejob-execution-role",
+    "LambdaExecutionRoleName": "ops-db-lambda-execution-role",
+    "GlueExportpythonver": "3",
+    "GlueExportnumberofworkers":"2",
+    "GlueExportmaxconcuruns":"2",
+    "GlueExportworkertype":"G.1X",
+    "GlueExportTimeout":"60",
+    "GlueExportversion":"3.0"
   }
+}

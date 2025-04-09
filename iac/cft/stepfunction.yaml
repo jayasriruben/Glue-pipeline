@@ -6,6 +6,12 @@ Description: >
     exporting data to S3, and importing data back into DynamoDB
 
 Parameters:
+
+  StateMachineName:
+    Type: String
+    Description: "The name of the Step Function State Machine. For example: ops-Dynamodb-backup-restoration"
+    Default: "ops-dynamodb-backup-restoration"
+
   FindLatestBackupFunctionName:
     Type: String
     Description: "The name of the Lambda function to find the latest DynamoDB backup. For example: ops-find-latest-backup"
@@ -21,20 +27,20 @@ Parameters:
     Description: "The name of the Lambda function to check the restore status of the DynamoDB table. For example: ops-check-restore-status"
     Default: "ops-check-restore-status"
     
-  ExportDynamoDBToS3GlueName:
+  ExportToS3GlueJobName:
     Type: String
     Description: "The name of the Lambda function to export data to S3. For example: ops-export-to-s3"
-    Default: "ops-export-to-s3"
+    Default: "ops-export-dynamodb-to-s3-gluejob"
 
-  DeleteDynamoDBDataGlueName:
+  DeleteDynamoDBDataGlueJobName:
     Type: String
     Description: "The name of the Lambda function to delete the DynamoDB table. For example: ops-delete-dynamodb-data"
-    Default: "ops-delete-dynamodb-data"
+    Default: "ops-delete-dynamodb-gluejob"
 
-  ImportS3ToDynamoDBGlueName:
+  ImportS3ToDynamoDBGlueJobName:
     Type: String
     Description: "The name of the Lambda function to import data from S3 to DynamoDB. For example: ops-imports3-to-dynamodb "
-    Default: "ops-imports3-to-dynamodb"
+    Default: "ops-import-s3-to-dynamodb-gluejob"
 
   DeleteDynamoDBTableFunctionName:
     Type: String
@@ -43,15 +49,13 @@ Parameters:
 
   StepFunctionRoleName:
     Type: String
+    Description: "The name of the Step function role. For example: ops-step-function-role"
     Default: "ops-step-function-role"  
 
   DynamoDBBucketName:
+    Description: "The name of the DynamoDb bucket. For example: dynamodbexportglue123"
     Type: String
-
-  StateMachineName:
-    Type: String
-    Description: "The name of the state machine. For example: ops-dynamodb-backup-restoration"
-    Default: "ops-dynamodb-backup-restoration"
+    Default: "dynamodbexportglue123"
 
 Resources:
   # IAM Role for Step Function 
@@ -87,9 +91,9 @@ Resources:
                   - "glue:StartJobRun"
                   - "glue:GetJobRun"
                 Resource:
-                  - !Sub arn:aws:glue:${AWS::Region}:${AWS::AccountId}:job/${ExportDynamoDBToS3GlueName}
-                  - !Sub arn:aws:glue:${AWS::Region}:${AWS::AccountId}:job/${DeleteDynamoDBDataGlueName}
-                  - !Sub arn:aws:glue:${AWS::Region}:${AWS::AccountId}:job/${ImportS3ToDynamoDBGlueName}
+                  - !Sub arn:aws:glue:${AWS::Region}:${AWS::AccountId}:job/${ExportToS3GlueJobName}
+                  - !Sub arn:aws:glue:${AWS::Region}:${AWS::AccountId}:job/${DeleteDynamoDBDataGlueJobName}
+                  - !Sub arn:aws:glue:${AWS::Region}:${AWS::AccountId}:job/${ImportS3ToDynamoDBGlueJobName}
 
                   
   # Step Function State Machine
@@ -101,9 +105,9 @@ Resources:
       DefinitionString: !Sub |
         {
           "Comment": "DynamoDB Backup Restoration Process",
-          "StartAt": "FindLatestBackup",
+          "StartAt": "ProcessMultipleTables",
           "States": {
-            "FindLatestBackup": {
+            "ProcessMultipleTables": {
               "Type": "Map",
               "ItemsPath": "$.DynamoDBTableNames",
               "MaxConcurrency": 2,
@@ -112,9 +116,9 @@ Resources:
                 "TABLE_NAME.$": "$$.Map.Item.Value"
               },
               "Iterator": {
-                "StartAt": "FindLatestBackupforTable",
+                "StartAt": "FindLatestBackup",
                 "States": {
-                  "FindLatestBackupforTable": {
+                  "FindLatestBackup": {
                     "Type": "Task",
                     "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${FindLatestBackupFunctionName}",
                     "Parameters": {
@@ -128,7 +132,7 @@ Resources:
                     "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${RestoreBackupFunctionName}",
                     "Parameters": {
                       "TABLE_NAME.$": "$.TABLE_NAME",
-                      "latest_backup_arn.$": "$.backup.latest_backup_arn"
+                      "backup_arn.$": "$.backup.latest_backup_arn"
                     },
                     "ResultPath": "$.restore",
                     "Next": "CheckRestoreStatus"
@@ -137,18 +141,18 @@ Resources:
                     "Type": "Task",
                     "Resource": "arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:${CheckRestoreStatusFunctionName}",
                     "Parameters": {
-                      "restored_table_name.$": "$.restore.restore_table_name"
+                      "restored_table_name.$": "$.restore.restore_table_name"  
                     },
-                    "ResultPath": "$.restoreStatus",
+                    "ResultPath": "$.RestoreStatus",  
                     "Next": "IsTableActive"
                   },
                   "IsTableActive": {
                     "Type": "Choice",
                     "Choices": [
                       {
-                        "Variable": "$.restoreStatus.status",
+                        "Variable": "$.RestoreStatus.status",
                         "StringEquals": "ACTIVE",
-                        "Next": "ExportToS3"
+                        "Next": "ExportToS3"  
                       }
                     ],
                     "Default": "WaitBeforeRetry"
@@ -162,9 +166,9 @@ Resources:
                     "Type": "Task",
                     "Resource": "arn:aws:states:::glue:startJobRun",
                     "Parameters": {
-                      "JobName": ${ExportDynamoDBToS3GlueName},
+                      "JobName": "${ExportToS3GlueJobName}",
                       "Arguments": {
-                        "--TABLE_NAME.$": "$.restore.restore_table_name",
+                        "--DYNAMODB_TABLE.$": "$.restore.restore_table_name",
                         "--S3_BUCKET": "${DynamoDBBucketName}",
                         "--FILE_NAME.$": "$.restore.file_name"
                       }
@@ -181,7 +185,7 @@ Resources:
                     "Type": "Task",
                     "Resource": "arn:aws:states:::aws-sdk:glue:getJobRun",
                     "Parameters": {
-                      "JobName": "&{ExportDynamoDBToS3GlueName}",
+                      "JobName": "${ExportToS3GlueJobName}",
                       "RunId.$": "$.export.JobRunId"
                     },
                     "ResultPath": "$.jobStatus",
@@ -207,9 +211,9 @@ Resources:
                     "Type": "Task",
                     "Resource": "arn:aws:states:::glue:startJobRun",
                     "Parameters": {
-                      "JobName": "${DeleteDynamoDBDataGlueName}",
+                      "JobName": "${DeleteDynamoDBDataGlueJobName}",
                       "Arguments": {
-                        "--TABLE_NAME.$": "$.TABLE_NAME"
+                        "--DYNAMODB_TABLE.$": "$.TABLE_NAME"
                       }
                     },
                     "ResultPath": "$.delete",
@@ -224,10 +228,10 @@ Resources:
                     "Type": "Task",
                     "Resource": "arn:aws:states:::aws-sdk:glue:getJobRun",
                     "Parameters": {
-                      "JobName.$": "$.delete.JobName",
-                      "RunId.$": "$.delete.JobRunId"
+                      "JobName.$": "$.delete.JobName",  
+                      "RunId.$": "$.delete.JobRunId"  
                     },
-                    "ResultPath": "$.delete.Status",
+                    "ResultPath": "$.delete.Status",  
                     "Next": "CheckDeleteJobStatus"
                   },
                   "CheckDeleteJobStatus": {
@@ -236,17 +240,17 @@ Resources:
                       {
                         "Variable": "$.delete.Status.JobRun.JobRunState",
                         "StringEquals": "SUCCEEDED",
-                        "Next": "ImportS3ToDynamoDB"
+                        "Next": "ImportS3ToDynamoDB"  
                       },
                       {
                         "Variable": "$.delete.Status.JobRun.JobRunState",
                         "StringEquals": "FAILED",
-                        "Next": "FailState"
+                        "Next": "FailState"  
                       },
                       {
                         "Variable": "$.delete.Status.JobRun.JobRunState",
                         "StringEquals": "STOPPED",
-                        "Next": "FailState"
+                        "Next": "FailState"  
                       }
                     ],
                     "Default": "WaitForDeleteJobCompletion"
@@ -255,9 +259,9 @@ Resources:
                     "Type": "Task",
                     "Resource": "arn:aws:states:::glue:startJobRun",
                     "Parameters": {
-                      "JobName": "${ImportS3ToDynamoDBGlueName}",
+                      "JobName": "${ImportS3ToDynamoDBGlueJobName}",
                       "Arguments": {
-                        "--TABLE_NAME.$": "$.TABLE_NAME",
+                        "--DYNAMODB_TABLE.$": "$.TABLE_NAME",
                         "--S3_BUCKET": "${DynamoDBBucketName}",
                         "--S3_KEY.$": "$.restore.file_name"
                       }
@@ -268,16 +272,16 @@ Resources:
                   "WaitForImportJobCompletion": {
                     "Type": "Wait",
                     "Seconds": 60,
-                  "Next": "GetImportJobStatus"
+                    "Next": "GetImportJobStatus"
                   },
                   "GetImportJobStatus": {
                     "Type": "Task",
                     "Resource": "arn:aws:states:::aws-sdk:glue:getJobRun",
                     "Parameters": {
-                      "JobName.$": "$.import.JobName",
-                      "RunId.$": "$.import.JobRunId"
+                      "JobName.$": "$.import.JobName",  
+                      "RunId.$": "$.import.JobRunId"  
                     },
-                    "ResultPath": "$.import.Status",
+                    "ResultPath": "$.import.Status",  
                     "Next": "CheckImportJobStatus"
                   },
                   "CheckImportJobStatus": {
@@ -286,17 +290,17 @@ Resources:
                       {
                         "Variable": "$.import.Status.JobRun.JobRunState",
                         "StringEquals": "SUCCEEDED",
-                        "Next": "DeleteDynamoDBTable"
+                        "Next": "DeleteDynamoDBTable"  
                       },
                       {
                         "Variable": "$.import.Status.JobRun.JobRunState",
                         "StringEquals": "FAILED",
-                        "Next": "FailState"
+                        "Next": "FailState"  
                       },
                       {
                         "Variable": "$.import.Status.JobRun.JobRunState",
                         "StringEquals": "STOPPED",
-                        "Next": "FailState"
+                        "Next": "FailState"  
                       }
                     ],
                     "Default": "WaitForImportJobCompletion"
@@ -309,7 +313,7 @@ Resources:
                     },
                     "Next": "SucceedState"
                   },
-                "FailState": {
+                  "FailState": {
                     "Type": "Fail",
                     "Error": "ProcessFailed",
                     "Cause": "An error occurred during the process."
@@ -318,7 +322,8 @@ Resources:
                     "Type": "Succeed"
                   }
                 }
-              }
+              },
+              "End": true
             }
           }
         }

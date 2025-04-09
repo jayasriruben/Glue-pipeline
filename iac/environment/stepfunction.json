@@ -1,15 +1,25 @@
 {
-    "Parameters": {
-      "DynamoDBBucketName": "dynamodbexport25",
-      "StateMachineName" : "ops-dynamodb-backup-restoration",
-      "StepFunctionRoleName": "ops-step-function-role",
-      "FindLatestBackupFunctionName": "ops-find-latest-backup",
-      "RestoreBackupFunctionName": "ops-restore-backup",
-      "CheckRestoreStatusFunctionName": "ops-check-restore-status",
-      "ExportDynamoDBToS3GlueName": "ops-export-to-s3",
-      "DeleteDynamoDBDataGlueName": "ops-delete-dynamodb-data",
-      "ImportS3ToDynamoDBGlueName": "ops-imports3-to-dynamodb",
-      "DeleteDynamoDBTableFunctionName": "ops-delete-dynamodb-table"
-    }
+  "Parameters": {
+    "DynamoDBBucketName": "dynamodbexportglue123",
+    "FindLatestBackupFunctionName": "ops-db-find-latest-backup",
+    "RestoreBackupFunctionName": "ops-db-restore-backup",
+    "CheckRestoreStatusFunctionName": "ops-db-check-restore-status",
+    "ExportToS3GlueJobName": "ops-db-export-to-s3",
+    "DeleteDynamoDBDataGlueJobName": "ops-db-delete-dynamodb-data",
+    "ImportS3ToDynamoDBGlueJobName": "ops-db-imports3-to-dynamodb",
+    "DeleteDynamoDBTableFunctionName": "ops-db-delete-dynamodb-table",
+    "StepFunctionRoleName":"ops-db-step-function-role"
   }
-   
+}
+ 
+
+      
+
+
+
+
+
+
+
+
+
